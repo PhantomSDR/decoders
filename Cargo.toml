@@ -11,41 +11,40 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = "0.2.63"
+wasm-bindgen = "0.2.92"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.6", optional = true }
+console_error_panic_hook = { version = "0.1.7", optional = true }
 
 # `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
 # compared to the default allocator's ~10K. It is slower than the default
 # allocator, however.
 wee_alloc = { version = "0.4.5", optional = true }
 futuredsp = "0.0.6"
-js-sys = "0.3.63"
-symphonia = "0.5.2"
-samplerate = "0.2.4"
+js-sys = "0.3.69"
+symphonia = "0.5.4"
 ringbuf = "0.3.3"
-web-sys = { version = "0.3.63", features = ["console"] }
-zstd = { version = "0.12.3", features = ["wasm"] }
-serde = { version = "1.0.163", features = ["derive"] }
-serde-wasm-bindgen = "0.5.0"
+web-sys = { version = "0.3.69", features = ["console"] }
+zstd = { version = "0.13.0", default-features = false, features = ["wasm", "thin"] }
+serde = { version = "1.0.197", features = ["derive"] }
+serde-wasm-bindgen = "0.6.5"
 digital-filter = "0.1.1"
-rubato = "0.12.0"
-rustfft = "6.1.0"
+rubato = "0.15.0"
+rustfft = "6.2.0"
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.13"
+wasm-bindgen-test = "0.3.42"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
 lto = true
-opt-level = 3
-wasm-opt = ['-O4']
+opt-level = 's'
+wasm-opt = ['-Os']
 
 [build-dependencies]
-cc = "1.0.79"
+cc = "1.0.90"
 
 #CMAKE=$(pwd)/cmake.sh CFLAGS="-I$(pwd)/includes -nostdlib -Wl,--no-entry" wasm-pack build

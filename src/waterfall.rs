@@ -6,16 +6,16 @@ use js_sys::Uint8Array;
 use zstd::stream;
 
 #[wasm_bindgen]
-pub struct ZstdWaterfallDecoder {
+pub struct ZstdStreamDecoder {
     decoder: stream::write::Decoder<'static, Vec<u8>>,
 }
 
 #[wasm_bindgen]
-impl ZstdWaterfallDecoder {
+impl ZstdStreamDecoder {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> ZstdWaterfallDecoder {
+    pub fn new() -> ZstdStreamDecoder {
         let decoder = stream::write::Decoder::new(Vec::new()).unwrap();
-        ZstdWaterfallDecoder { decoder }
+        ZstdStreamDecoder { decoder }
     }
     pub fn clear(&mut self) {
         let output = self.decoder.get_mut();
@@ -28,6 +28,6 @@ impl ZstdWaterfallDecoder {
         if slice.len() == 0 {
             return Vec::new();
         }
-        [Uint8Array::from(self.decoder.get_ref().as_slice())].to_vec()
+        [Uint8Array::from(slice)].to_vec()
     }
 }

@@ -1,10 +1,14 @@
-use symphonia::default::codecs::FlacDecoder;
-use symphonia::default::formats::FlacReader;
+use std::collections::VecDeque;
+
+use rustfft::num_traits::float;
 use wasm_bindgen::prelude::*;
 
 use js_sys::Float32Array;
+use web_sys::console;
 
-use samplerate::{ConverterType, Samplerate};
+use symphonia::default::codecs::FlacDecoder;
+use symphonia::default::formats::FlacReader;
+use rubato::{Resampler, SincFixedIn, SincInterpolationType, SincInterpolationParameters, WindowFunction};
 
 use crate::foxenflac::FoxenFlacDecoder;
 use crate::noiseblankerwild::NoiseBlankerWild;
@@ -25,7 +29,8 @@ pub trait AudioDecoder {
 #[wasm_bindgen]
 pub struct Audio {
     decoder: Box<dyn AudioDecoder>,
-    resampler: Samplerate,
+    resampler: SincFixedIn<f32>,
+    resampling_queue: VecDeque<f32>,
     decoded_callback: Option<js_sys::Function>,
 
     noise_reduction: NoiseReduction,
@@ -44,19 +49,25 @@ impl Audio {
         // Get more resolution
         // Find largest power of 2 below 2000000000/input_rate
         let scale = (2000000000. / input_rate).log2().floor() as i32;
-        let input_rate_scaled = (input_rate * (2_f64.powi(scale))) as u32;
-        let output_rate_scaled = output_rate * (2_u32.pow(scale as u32));
-        let resampler = Samplerate::new(
-            ConverterType::SincBestQuality,
-            input_rate_scaled,
-            output_rate_scaled,
+        let params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 256,
+            window: WindowFunction::BlackmanHarris2,
+        };
+        let resampler = SincFixedIn::<f32>::new(
+            output_rate as f64 / input_rate as f64,
+            2.0,
+            params,
+            1024,
             1,
-        )
-        .expect("resampler");
+        ).expect("resampler");
         let decoder: Box<dyn AudioDecoder> = match codec {
-            AudioCodec::Flac => Box::new(SymphoniaDecoder::<FlacReader, FlacDecoder>::new()),
-            //AudioCodec::Flac => Box::new(FoxenFlacDecoder::new()),
-            AudioCodec::Opus => Box::new(SymphoniaDecoder::<FlacReader, FlacDecoder>::new()),
+            //AudioCodec::Flac => Box::new(SymphoniaDecoder::<FlacReader, FlacDecoder>::new()),
+            AudioCodec::Flac => Box::new(FoxenFlacDecoder::new()),
+            _ => Box::new(FoxenFlacDecoder::new())
+            //AudioCodec::Opus => Box::new(SymphoniaDecoder::<FlacReader, FlacDecoder>::new()),
         };
         let noise_reduction = NoiseReduction::new(
             NoiseReductionType::NoiseReduction,
@@ -65,13 +76,14 @@ impl Audio {
             1.024e-4,
             1.28e-1,
         );
-        let spectral_noise_reduction = SpectralNoiseReduction::new(output_rate, 0.0, 0.95, 30.0);
+        let spectral_noise_reduction = SpectralNoiseReduction::new(output_rate, 1./512., 0.95, 30.0);
         let noise_blanker = NoiseBlankerWild::new(0.95, 10, 7);
         let autonotch = NoiseReduction::new(NoiseReductionType::Notch, 64, 32, 1.024e-4, 1.28e-1);
         Audio {
             decoder,
             resampler,
             decoded_callback: Option::None,
+            resampling_queue: VecDeque::new(),
 
             noise_reduction,
             noise_reduction_enabled: false,
@@ -100,12 +112,23 @@ impl Audio {
                 &Float32Array::from(float_decoded.as_slice()),
             );
         }
-        let resampled_res = self.resampler.process(&float_decoded);
-        if resampled_res.is_err() {
-            return Float32Array::new_with_length(0);
+        // Insert all into the resampling queue
+        let mut resampled = Vec::new();
+        let original_len = float_decoded.len();
+        self.resampling_queue.extend(float_decoded);
+        while self.resampling_queue.len() >= 1024 {
+            // Take 1024 samples from the queue
+            let mut resample_input = Vec::new();
+            for _ in 0..1024 {
+                resample_input.push(self.resampling_queue.pop_front().unwrap());
+            }
+            // Try to resample, abandon if it fails
+            let resampled_res = self.resampler.process(&[&resample_input], Option::None);
+            if resampled_res.is_err() {
+                return Float32Array::new_with_length(0);
+            }
+            resampled.extend(resampled_res.unwrap()[0].iter());
         }
-
-        let mut resampled = resampled_res.unwrap();
         if self.noise_reduction_enabled {
             self.spectral_noise_reduction.process(&mut resampled);
         }

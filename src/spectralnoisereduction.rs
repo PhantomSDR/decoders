@@ -455,6 +455,29 @@ impl SpectralNoiseReduction {
             pspri: 0.5,
         }
     }
+
+    pub fn process(&mut self, buf: &mut Vec<f32>) {
+        let ret = self.process_part(buf);
+        buf.clear();
+        buf.extend_from_slice(&ret);
+    }
+    pub fn process_part(&mut self, buf: &mut[f32]) -> Vec<f32> {
+        // insert all into self.ringbuf
+        for i in 0..buf.len() {
+            self.ring_buf.push_back(buf[i]);
+        }
+        let mut ret = Vec::new();
+        // process_chunks in chunks of FFT_FULL
+        while self.ring_buf.len() >= FFT_FULL {
+            let mut chunk = [0.0; FFT_FULL];
+            for i in 0..FFT_FULL {
+                chunk[i] = self.ring_buf.pop_front().unwrap();
+            }
+            self.process_chunk(&mut chunk);
+            ret.extend_from_slice(&chunk);
+        }
+        ret
+    }
     /*
     void nr_spectral_process(int rx_chan, int nsamps, TYPEMONO16 *inputsamples, TYPEMONO16 *outputsamples )
     {
@@ -481,24 +504,6 @@ impl SpectralNoiseReduction {
             s->first_time = 2;  // we need to do some more a bit later down
         }
     */
-    pub fn process(&mut self, buf: &mut[f32]) -> Vec<f32> {
-        // insert all into self.ringbuf
-        for i in 0..buf.len() {
-            self.ring_buf.push_back(buf[i]);
-        }
-        let mut ret = Vec::new();
-        // process_chunks in chunks of FFT_FULL
-        while self.ring_buf.len() >= FFT_FULL {
-            let mut chunk = [0.0; FFT_FULL];
-            for i in 0..FFT_FULL {
-                chunk[i] = self.ring_buf.pop_front().unwrap();
-            }
-            self.process_chunk(&mut chunk);
-            ret.extend_from_slice(&chunk);
-        }
-        ret
-    }
-
     pub fn process_chunk(&mut self, buf: &mut [f32]) {
         let mut ai;
         let mut VAD_low = 0;

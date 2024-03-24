@@ -16,10 +16,15 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <assert.h>
+//#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#define assert(x) ((void)0)
+void *malloc(size_t);
+void free(void *);
+
 
 #include "flac.h"
 
